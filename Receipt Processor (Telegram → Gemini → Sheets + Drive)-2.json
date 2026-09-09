@@ -1,0 +1,567 @@
+{
+  "name": "Receipt Processor (Telegram → Gemini → Sheets + Drive)",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "={{ $json.submissionDate }}",
+        "limit": 1,
+        "filter": {
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "170WSGwDsF1FHft7jEYerziO9C1h-Ci0v",
+            "cachedResultName": "Receipts_folder",
+            "cachedResultUrl": "https://drive.google.com/drive/folders/170WSGwDsF1FHft7jEYerziO9C1h-Ci0v"
+          },
+          "whatToSearch": "folders"
+        },
+        "options": {}
+      },
+      "id": "44d31e11-2fd1-47d8-b610-a03e11df672e",
+      "name": "Find Date Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1328,
+        576
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "WTOMz2YQbAzN25O0",
+          "name": "Google Drive account"
+        }
+      },
+      "notes": "alwaysOutputData is REQUIRED: a search with no hits emits zero items, which would kill the branch on the first receipt of every day."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "folder-exists",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "56f085ab-66bf-4c5b-901c-5135de7d9641",
+      "name": "Folder Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1552,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "download": true,
+          "imageSize": "large"
+        }
+      },
+      "id": "1ddb0450-a745-4629-b603-62634bc15c7e",
+      "name": "Receive Receipt Photo1",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        432,
+        432
+      ],
+      "webhookId": "4d925f84-d5b7-438a-b628-88154cdf6b7f",
+      "credentials": {
+        "telegramApi": {
+          "id": "bSo7YMc12q4kgenH",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "submission-date",
+              "name": "submissionDate",
+              "type": "string",
+              "value": "={{ $now.setZone('Asia/Manila').toFormat('yyyy-MM-dd') }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "0eef31a2-9f72-4db2-8a11-54d83835d2b3",
+      "name": "Add Submission Date1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        656,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.6-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.6-flash"
+        },
+        "text": "You are a receipt data extractor. Read this receipt image and extract the merchant name, the total amount, and the date printed on the receipt. Respond with ONLY compact JSON, no markdown, in this exact shape: {\"merchant\":\"\",\"amount\":\"\",\"date\":\"\"}. Use an empty string for anything you cannot find.",
+        "inputType": "binary",
+        "options": {
+          "maxOutputTokens": 2048
+        }
+      },
+      "id": "cf1b3d96-21a2-4382-a1a1-7fb31b3fd49d",
+      "name": "Extract Receipt Details1",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        512
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "MrP8k8NvDvfHpaZl",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $json;\nconst raw = j.content?.parts?.[0]?.text ?? j.text ?? '';\nconst text = typeof raw === 'string' ? raw : JSON.stringify(raw);\nlet data = {};\ntry {\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  data = JSON.parse(match ? match[0] : text);\n} catch (e) {\n  data = {};\n}\nreturn {\n  merchant: data.merchant ?? '',\n  amount: data.amount ?? '',\n  date: data.date ?? '',\n  submissionDate: $('Add Submission Date1').item.json.submissionDate,\n};"
+      },
+      "id": "a0f359bc-8f0f-4056-aea5-7d9718164334",
+      "name": "Parse Receipt JSON1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $('Add Submission Date1').item.json.submissionDate }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "170WSGwDsF1FHft7jEYerziO9C1h-Ci0v",
+          "mode": "list",
+          "cachedResultName": "Receipts_folder",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/170WSGwDsF1FHft7jEYerziO9C1h-Ci0v"
+        },
+        "options": {
+          "simplifyOutput": true
+        }
+      },
+      "id": "260712ba-8c73-417c-b14f-6dd615c71b83",
+      "name": "Create Date Folder1",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1776,
+        576
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "WTOMz2YQbAzN25O0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "9a423091-1e2f-4bb3-8b67-f53ab7ed6435",
+      "name": "Combine Photo + Folder1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2000,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "name": "=receipt_{{ $now.toFormat('yyyyLLdd_HHmmss') }}.jpg",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {
+          "simplifyOutput": true
+        }
+      },
+      "id": "9db248ca-5d8c-41aa-98d9-8f8cceac94c4",
+      "name": "Save Photo to Drive1",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2224,
+        432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "WTOMz2YQbAzN25O0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1a5sU5BfiSk3GV3Yn7i0reEi7OlqOukZOH3Zj6DBT_Rs",
+          "mode": "list",
+          "cachedResultName": "receipts_09052026",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1a5sU5BfiSk3GV3Yn7i0reEi7OlqOukZOH3Zj6DBT_Rs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1a5sU5BfiSk3GV3Yn7i0reEi7OlqOukZOH3Zj6DBT_Rs/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Submission Date": "={{ $('Parse Receipt JSON1').first().json.submissionDate }}",
+            "Merchant": "={{ $('Parse Receipt JSON1').first().json.merchant }}",
+            "Amount": "={{ $('Parse Receipt JSON1').first().json.amount }}",
+            "Receipt Date": "={{ $('Parse Receipt JSON1').first().json.date }}",
+            "File Name": "={{ $json.name }}",
+            "Drive Link": "=https://drive.google.com/file/d/{{ $json.id }}/view",
+            "Drive File ID": "={{ $json.id }}",
+            "Submitted By": "={{ $('Receive Receipt Photo1').first().json.message.from.username || $('Receive Receipt Photo1').first().json.message.from.first_name }}",
+            "Telegram Message ID": "={{ $('Receive Receipt Photo1').first().json.message.message_id }}",
+            "Caption": "={{ $('Receive Receipt Photo1').first().json.message.caption ?? '' }}",
+            "Logged At": "={{ $now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm:ss') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Submission Date",
+              "displayName": "Submission Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Merchant",
+              "displayName": "Merchant",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Amount",
+              "displayName": "Amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Receipt Date",
+              "displayName": "Receipt Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "File Name",
+              "displayName": "File Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Drive Link",
+              "displayName": "Drive Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Drive File ID",
+              "displayName": "Drive File ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Submitted By",
+              "displayName": "Submitted By",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Telegram Message ID",
+              "displayName": "Telegram Message ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Caption",
+              "displayName": "Caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Logged At",
+              "displayName": "Logged At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "395d68dd-24a0-4b9b-bc8e-bccfbb7b3b2e",
+      "name": "Log to Google Sheet1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2448,
+        432
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "UFjamelUBqmdSySV",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Find Date Folder": {
+      "main": [
+        [
+          {
+            "node": "Folder Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Folder Exists?": {
+      "main": [
+        [
+          {
+            "node": "Combine Photo + Folder1",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Create Date Folder1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive Receipt Photo1": {
+      "main": [
+        [
+          {
+            "node": "Add Submission Date1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Combine Photo + Folder1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Submission Date1": {
+      "main": [
+        [
+          {
+            "node": "Extract Receipt Details1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Receipt Details1": {
+      "main": [
+        [
+          {
+            "node": "Parse Receipt JSON1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Receipt JSON1": {
+      "main": [
+        [
+          {
+            "node": "Find Date Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Date Folder1": {
+      "main": [
+        [
+          {
+            "node": "Combine Photo + Folder1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Photo + Folder1": {
+      "main": [
+        [
+          {
+            "node": "Save Photo to Drive1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Photo to Drive1": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "versionId": "59b7fdb8-56af-4f1d-a996-5236a890825b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "1519d46378d0db162e64ec63f2598f851a6d24871177e1ffc223fc197747ae60"
+  },
+  "nodeGroups": [
+    {
+      "id": "e5e1841a-5b29-414a-a0cb-63f639bda326",
+      "name": "Extract Details",
+      "nodeIds": [
+        "0eef31a2-9f72-4db2-8a11-54d83835d2b3",
+        "cf1b3d96-21a2-4382-a1a1-7fb31b3fd49d",
+        "a0f359bc-8f0f-4056-aea5-7d9718164334"
+      ],
+      "description": "Stamp the submission date and use Google Gemini to read merchant, amount, and date from the receipt image."
+    }
+  ],
+  "id": "GPpmrL2uK3TwOxk1",
+  "tags": []
+}
