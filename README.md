@@ -1,4 +1,4 @@
-# Telegram Receipt Processor
+# Telegram Receipt Processor Pipeline
 
 ## Overview
 
@@ -7,7 +7,9 @@ An n8n workflow that automatically processes receipt photos sent through Telegra
 The workflow uses Google Gemini to extract receipt details, saves the original photo to Google Drive by submission date, and logs the extracted information with a Drive link in Google Sheets.
 
 ## Workflow
+![Telegram Receipt Processing Workflow](telegram-automation-receipt-pipeline.png)
 
+## Flowchart
 ```mermaid
 graph TD;
     A[Telegram<br/>Receive Receipt Photo] --> B[Add Submission Date];
@@ -28,13 +30,12 @@ graph TD;
 ## Features
 
 - Telegram receipt photo processing
-- Gemini Vision receipt extraction
+- Gemini Vision image model for receipt extraction, with specif specific prompt
 - Merchant, amount, and receipt date extraction
 - Automatic Google Drive archiving
 - Date-based folder organization
 - Google Sheets logging
 - Direct Google Drive file link
-- Retry handling for Google Sheets writes
 
 ## Archive Structure
 
